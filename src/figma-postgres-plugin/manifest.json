@@ -1,0 +1,11 @@
+{
+  "name": "Figma-PostgreSQL连接插件",
+  "api": "1.70.0",
+  "main": "src/code.js",
+  "ui": "src/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["http://8.152.195.33:7007"],
+    "reasoning": "需要连接到 PostgreSQL 数据库服务器以获取和存储设计数据"
+  }
+}

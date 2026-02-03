@@ -1,21 +1,71 @@
 export type LLMConfig = {
-    provider: 'ollama' | 'openai' | 'deepseek';
+    provider: 'ollama' | 'openai' | 'deepseek' | 'moonshot';
     baseUrl: string;
     apiKey: string;
     model: string;
+    systemPrompt?: string;
+    // TTS Settings
+    ttsProvider: 'browser' | 'openai' | 'edge'; // Edge implemented via external API if possible, or just placeholder
+    ttsModel: string;
+    ttsVoice: string;
+    ttsSpeed: number;
 };
+
+// 增加 UI 控制指令说明
+const UI_CONTROL_PROMPT = `
+作为全息魔方的控制核心，你可以通过在回复末尾附加指令来控制界面。
+可用指令格式：[[CMD:指令名]]
+支持的指令：
+- [[CMD:OPEN_SETTINGS]] : 打开设置面板
+- [[CMD:OPEN_HISTORY]] : 打开历史记录
+- [[CMD:CLOSE_PANEL]] : 关闭所有面板
+- [[CMD:THEME_RED]] : 切换为红色警戒模式
+- [[CMD:THEME_CYAN]] : 切换为青色默认模式
+
+例如，当用户说“打开设置”时，请回复：“已为您调出神经中枢面板。[[CMD:OPEN_SETTINGS]]”
+`;
 
 export const DEFAULT_CONFIG: LLMConfig = {
     provider: 'ollama',
     baseUrl: 'http://localhost:11434',
     apiKey: '',
-    model: 'llama3'
+    model: 'llama3',
+    systemPrompt: '你是言语云（YanYuCloud）的智能助手，一个存在于全息魔方中的数字生命。请用简洁、富有科技感和哲学深度的语言回答用户。' + UI_CONTROL_PROMPT,
+    ttsProvider: 'browser',
+    ttsModel: 'tts-1',
+    ttsVoice: 'alloy',
+    ttsSpeed: 1.0
 };
 
+// 模拟回复生成器（当API无法连接时使用）
+const MOCK_RESPONSES = [
+    "正在校准神经元连接... 检测到本地环境限制。这是来自言语云魔方的模拟信号。",
+    "维度数据传输中... 您的语音指令清晰可辨。在正式环境中，我将通过 Ollama 或云端 API 返回真实运算结果。",
+    "系统核心运转正常。您刚才提到的概念非常有趣，正如《黑客帝国》中所言，一切皆为信息流。",
+    "检测到情感波动。虽然我只是原型机，但我能感受到您对未来的期待。"
+];
+
+export interface MessageContent {
+    role: string;
+    content: string;
+    images?: string[]; // Base64 strings
+}
+
 export async function generateCompletion(
-    messages: { role: string; content: string }[],
+    messages: MessageContent[],
     config: LLMConfig
 ): Promise<string> {
+    // 插入系统提示词 (如果没有被用户覆盖，则追加 UI 控制指令)
+    let sysPrompt = config.systemPrompt || DEFAULT_CONFIG.systemPrompt;
+    if (!sysPrompt?.includes('[[CMD:')) {
+         sysPrompt += UI_CONTROL_PROMPT;
+    }
+
+    const fullMessages = [
+        { role: 'system', content: sysPrompt! },
+        ...messages
+    ];
+
     try {
         let url = '';
         let headers: Record<string, string> = {
@@ -23,47 +73,124 @@ export async function generateCompletion(
         };
         let body: any = {};
 
+        // 1. 构建请求
         if (config.provider === 'ollama') {
             // Ollama API
-            url = `${config.baseUrl}/api/chat`;
+            url = `${config.baseUrl.replace(/\/$/, '')}/api/chat`;
+            
+            // Ollama expects images inside the message object
+            const ollamaMessages = fullMessages.map(m => ({
+                role: m.role,
+                content: m.content,
+                images: m.images || undefined // Optional: Array of Base64 strings
+            }));
+
             body = {
                 model: config.model,
-                messages: messages,
+                messages: ollamaMessages,
                 stream: false
             };
-        } else if (config.provider === 'openai' || config.provider === 'deepseek') {
-            // OpenAI Compatible API (DeepSeek uses same format)
-            url = `${config.baseUrl}/v1/chat/completions`;
+        } else {
+            // OpenAI Compatible (DeepSeek, Moonshot, etc.)
+            let baseUrl = config.baseUrl.replace(/\/$/, '');
+            if (!baseUrl.endsWith('/v1')) baseUrl += '/v1';
+            
+            url = `${baseUrl}/chat/completions`;
             headers['Authorization'] = `Bearer ${config.apiKey}`;
+
+            // Transform for OpenAI Vision format if images exist
+            const openAiMessages = fullMessages.map(m => {
+                if (!m.images || m.images.length === 0) {
+                    return { role: m.role, content: m.content };
+                }
+                // Construct Vision Content Array
+                return {
+                    role: m.role,
+                    content: [
+                        { type: "text", text: m.content },
+                        ...m.images.map(img => ({
+                            type: "image_url",
+                            image_url: { url: `data:image/jpeg;base64,${img}` }
+                        }))
+                    ]
+                };
+            });
+
             body = {
                 model: config.model,
-                messages: messages,
+                messages: openAiMessages,
+                temperature: 0.7,
             };
         }
+
+        console.log(`[LLM] Requesting ${config.provider} at ${url}`);
+
+        // 2. 发起请求
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); 
 
         const response = await fetch(url, {
             method: 'POST',
             headers,
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`API Error: ${response.status} ${err}`);
+            const errText = await response.text();
+            throw new Error(`API Error: ${response.status} - ${errText}`);
         }
 
         const data = await response.json();
 
+        // 3. 解析响应
         if (config.provider === 'ollama') {
-            return data.message?.content || "No response from Ollama";
+            return data.message?.content || "Ollama 返回了空内容";
         } else {
-            return data.choices?.[0]?.message?.content || "No response from API";
+            return data.choices?.[0]?.message?.content || "API 返回了空内容";
         }
+
     } catch (error) {
-        console.error("LLM Call Failed:", error);
-        if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-             return "连接失败：请检查 Ollama 是否运行，并允许跨域 (OLLAMA_ORIGINS='*')";
+        // Silenced error log to reduce noise for "Failed to fetch"
+        const isMixedContent = String(error).includes('Failed to fetch') && window.location.protocol === 'https:';
+        
+        if (isMixedContent) {
+             console.log("[LLM] Fallback: Mixed Content prevented request to insecure API.");
+             return `[安全模式] 浏览器已拦截对不安全API (${config.baseUrl}) 的请求。请使用支持 HTTPS 的 API 或在设置面板中查看帮助。\n\n(模拟回复) ${MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)]}`;
+        } else {
+             console.warn("[LLM] API Call Failed, falling back to Mock:", error);
+             await new Promise(resolve => setTimeout(resolve, 1500)); 
+             return `[演示模式/离线] 连接 ${config.provider} 失败。原因：${error instanceof Error ? error.message : String(error)}\n\n(模拟回复) ${MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)]}`;
         }
-        return `Error: ${error instanceof Error ? error.message : String(error)}`;
     }
+}
+
+// OpenAI TTS Fetcher
+export async function fetchOpenAITTS(text: string, config: LLMConfig): Promise<ArrayBuffer> {
+    const baseUrl = config.baseUrl.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '') + '/v1'; 
+    const url = `${baseUrl}/audio/speech`;
+    
+    console.log("[TTS] Requesting OpenAI TTS:", url);
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: config.ttsModel || 'tts-1',
+            input: text,
+            voice: config.ttsVoice || 'alloy',
+            speed: config.ttsSpeed || 1.0
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`TTS Error: ${response.statusText}`);
+    }
+
+    return await response.arrayBuffer();
 }

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Figma PG数据管理</title>
+  <style>
+    body {padding: 20px; font-family: Arial; max-width: 360px;}
+    .data-item {padding: 8px; margin: 4px 0; background: #f5f5f5; border-radius: 4px;}
+    .error {color: red; padding: 10px; background: #fee; border-radius: 4px;}
+    .success {color: green; padding: 10px; background: #efe; border-radius: 4px;}
+    .loading {color: #666; padding: 10px;}
+    .sql-section {margin-top: 20px;}
+    textarea {width: 100%; height: 80px; padding: 8px; box-sizing: border-box; margin: 8px 0;}
+    button {padding: 8px 16px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer;}
+    button:hover {background: #005a9e;}
+  </style>
+</head>
+<body>
+  <h3>NAS PostgreSQL数据库列表</h3>
+  <div id="db-result" class="loading">🔄 正在获取数据库列表...</div>
+
+  <!-- 自定义SQL执行区域（进阶功能） -->
+  <div class="sql-section">
+    <h4>自定义SQL操作</h4>
+    <textarea id="sql-input" placeholder="输入SQL语句（如：SELECT * FROM test_table;）"></textarea>
+    <button onclick="executeCustomSQL()">执行SQL</button>
+    <div id="sql-result" style="margin-top: 10px;"></div>
+  </div>
+
+  <script>
+    // 1. 加载数据库列表（基础功能）
+    fetch('http://8.152.195.33:7007/api/get-pg-data')
+      .then(res => {
+        if (!res.ok) throw new Error(`接口请求失败：${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        const resultDom = document.getElementById('db-result');
+        if (data.code === 200) {
+          resultDom.innerHTML = '<div class="success">✅ 数据库列表获取成功</div>' +
+            data.data.map(item => `<div class="data-item">${item.datname}</div>`).join('');
+        } else {
+          resultDom.innerHTML = `<div class="error">❌ ${data.message}</div>`;
+        }
+      })
+      .catch(err => {
+        document.getElementById('db-result').innerHTML = `<div class="error">❌ 请求失败：${err.message}</div>`;
+      });
+
+    // 2. 执行自定义SQL（进阶功能）
+    function executeCustomSQL() {
+      const sql = document.getElementById('sql-input').value.trim();
+      const resultDom = document.getElementById('sql-result');
+      if (!sql) {
+        resultDom.innerHTML = '<div class="error">❌ 请输入SQL语句</div>';
+        return;
+      }
+
+      resultDom.innerHTML = '<div class="loading">🔄 正在执行SQL...</div>';
+      fetch('http://8.152.195.33:7007/api/execute-sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: sql })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error(`SQL执行失败：${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (data.code === 200) {
+          resultDom.innerHTML = `<div class="success">✅ SQL执行成功</div><pre>${JSON.stringify(data.data, null, 2)}</pre>`;
+        } else {
+          resultDom.innerHTML = `<div class="error">❌ ${data.message}</div>`;
+        }
+      })
+      .catch(err => {
+        resultDom.innerHTML = `<div class="error">❌ 执行失败：${err.message}</div>`;
+      });
+    }
+  </script>
+</body>
+</html>
