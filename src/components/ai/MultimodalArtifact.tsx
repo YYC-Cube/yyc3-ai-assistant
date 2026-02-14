@@ -7,11 +7,12 @@ import { YYC3_DESIGN } from '@/utils/design-system'; // Import Design System
 interface MultimodalArtifactProps {
     type: 'image' | 'text';
     content: string; // Image URL (base64) or Text string
-    transcript: string; // Real-time voice transcript
-    onClose: () => void;
+    transcript?: string; // Real-time voice transcript
+    messages?: any[]; // Optional message context for dynamic elements
+    onClose?: () => void;
 }
 
-export function MultimodalArtifact({ type, content, transcript, onClose }: MultimodalArtifactProps) {
+export function MultimodalArtifact({ type, content, transcript, messages, onClose }: MultimodalArtifactProps) {
     // --- Physics & Motion State ---
     const x = useMotionValue(0);
     const y = useMotionValue(0);
@@ -54,7 +55,7 @@ export function MultimodalArtifact({ type, content, transcript, onClose }: Multi
             scale.set(1);
             triggerHaptic('light');
         } else if (cmd.includes('关闭') || cmd.includes('close')) {
-            onClose();
+            if (onClose) onClose();
             triggerHaptic('heavy');
         } else if (cmd.includes('分析') || cmd.includes('analyze')) {
             setActiveLayer('analysis');
@@ -78,6 +79,15 @@ export function MultimodalArtifact({ type, content, transcript, onClose }: Multi
         triggerHaptic('heavy'); // Snap back feel
     };
 
+    // If only messages are provided (used as dynamic background container), render nothing or custom logic
+    // This is to support the usage in ResponsiveAIAssistant line 673: <MultimodalArtifact messages={messages} />
+    if (messages && !content) {
+        return null; // Or render floating background artifacts if desired
+    }
+    
+    // Safety check
+    if (!content) return null;
+
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -85,7 +95,7 @@ export function MultimodalArtifact({ type, content, transcript, onClose }: Multi
             exit={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }}
             className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 ${YYC3_DESIGN.blur.glass} perspective-1000`}
             onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
+                if (e.target === e.currentTarget && onClose) onClose();
             }}
         >
             {/* 3D Container */}
@@ -175,9 +185,11 @@ export function MultimodalArtifact({ type, content, transcript, onClose }: Multi
                      <button onClick={() => setActiveLayer('analysis')} className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur flex items-center justify-center text-white transition-colors">
                          <Sparkles className="w-4 h-4" />
                      </button>
-                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur flex items-center justify-center text-white transition-colors">
-                         <X className="w-4 h-4" />
-                     </button>
+                     {onClose && (
+                        <button onClick={onClose} className="w-10 h-10 rounded-full bg-red-500/20 hover:bg-red-500/40 backdrop-blur flex items-center justify-center text-white transition-colors">
+                            <X className="w-4 h-4" />
+                        </button>
+                     )}
                 </div>
 
             </motion.div>

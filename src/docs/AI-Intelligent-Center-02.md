@@ -1,4 +1,4 @@
-# Figma AI 阶段提示词 - YYC³ 无边界设计原型开发
+# AI Family 阶段提示词 - YYC³ 无边界设计原型开发
 
 > ***YanYuCloudCube***
 > 言启象限 | 语枢未来

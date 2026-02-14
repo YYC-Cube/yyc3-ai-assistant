@@ -1,4 +1,4 @@
-import { LLMConfig } from './llm';
+import { LLMConfig } from '@/types';
 
 export interface CharacterProfile {
     id: string;

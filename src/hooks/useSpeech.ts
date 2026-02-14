@@ -20,7 +20,7 @@ class AudioVisualizer {
             this.source = this.audioContext.createMediaStreamSource(stream);
             this.source.connect(this.analyser);
         } catch (e) {
-            console.warn("AudioVisualizer init failed", e);
+            // Silently fail for visualizer - it's non-essential
         }
     }
 
@@ -41,10 +41,11 @@ export function useSpeech(onSpeechEnd?: (text: string) => void) {
     const [transcript, setTranscript] = useState('');
     const [error, setError] = useState<'not-supported' | 'permission-denied' | null>(null);
     
+    // Persistent permission flag to prevent repeated browser prompts/errors in one session
+    const permissionDeniedRef = useRef(false);
+    
     const recognitionRef = useRef<any>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    
-    // Track if visualizer is active to avoid unnecessary cleanup calls
     const visualizerActiveRef = useRef(false);
 
     useEffect(() => {
@@ -70,17 +71,22 @@ export function useSpeech(onSpeechEnd?: (text: string) => void) {
                 };
 
                 recognition.onerror = (event: any) => {
-                    // Ignore 'no-speech' errors as they are common and not fatal
+                    // Ignore 'no-speech' (timeout) as it's normal
                     if (event.error === 'no-speech') {
                          setSpeechState('idle');
                          return;
                     }
 
-                    console.warn('Speech recognition error:', event.error);
-                    
+                    // Handle Permission Errors Quietly
                     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                        permissionDeniedRef.current = true;
                         setError('permission-denied');
+                        // Do not console.warn here to keep console clean
+                    } else {
+                        // Only warn for unexpected errors
+                        console.warn('Speech recognition error:', event.error);
                     }
+                    
                     setSpeechState('idle');
                 };
 
@@ -99,23 +105,26 @@ export function useSpeech(onSpeechEnd?: (text: string) => void) {
     useEffect(() => { latestTranscriptRef.current = transcript; }, [transcript]);
 
     const startListening = useCallback(async () => {
-        if (speechState === 'listening') return;
+        // If we already know permission is denied, don't try again (avoids console spam)
+        if (speechState === 'listening' || permissionDeniedRef.current) {
+            if (permissionDeniedRef.current) {
+                // Re-trigger the error state so UI can show the Toast again if user tries
+                setError('permission-denied');
+            }
+            return;
+        }
         
-        // 1. Try to initialize Visualizer (Graceful Degradation)
+        // 1. Try to initialize Visualizer (Silent Fail)
         try {
-            // Check if getUserMedia is supported
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioVisualizer.init(stream);
                 visualizerActiveRef.current = true;
-            } else {
-                console.warn("navigator.mediaDevices.getUserMedia not supported in this environment");
             }
         } catch (err) {
-            // If getUserMedia fails (e.g. Permission denied for audio stream), 
-            // we catch it here but DO NOT stop the recognition process yet.
-            // We just won't have the nice waveform.
-            console.warn("Visualizer mic permission denied or error. Continuing without visualizer.", err);
+            // Visualizer failed (likely permission). 
+            // We proceed to speech recognition anyway.
+            // No console.warn to keep it clean.
         }
 
         // 2. Start Speech Recognition
@@ -123,11 +132,9 @@ export function useSpeech(onSpeechEnd?: (text: string) => void) {
             try {
                 recognitionRef.current.start();
             } catch (e) {
-                // If it's already started, just ignore
-                console.debug("Recognition start called but may be already active", e);
+                // Ignore if already started
             }
         } else {
-            // If recognition is not available at all
             setError('not-supported');
         }
     }, [speechState]);

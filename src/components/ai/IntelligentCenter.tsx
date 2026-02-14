@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, CheckCircle, Clock, Zap, Brain, Shield } from 'lucide-react';
+import { Activity, CheckCircle, Brain, Shield, Cpu, Network, Database, GitBranch, ArrowLeft, Home } from 'lucide-react';
 import { YYC3_DESIGN } from '@/utils/design-system';
+import { Button } from '@/components/ui/button';
+import { GestureContainer } from '@/components/ui/GestureContainer';
+import bgImage from "figma:asset/70d40eb9c421e3d0e166efde6c7aa221f28e3612.png";
 
 // --- Types ---
 interface ModuleNode {
@@ -11,20 +14,28 @@ interface ModuleNode {
   status: 'active' | 'idle' | 'warning';
   x: number;
   y: number;
-  color: string; // Tailwind class string for ease, or use Design System
+  color: string; 
+  size?: number; // Optional size override
 }
 
 interface IntelligentCenterProps {
   active: boolean;
   onClose: () => void;
   onLaunchModule: (moduleId: string) => void;
+  onShowSwitcher?: () => void;
 }
 
-export function IntelligentCenter({ active, onClose, onLaunchModule }: IntelligentCenterProps) {
+export function IntelligentCenter({ active, onClose, onLaunchModule, onShowSwitcher }: IntelligentCenterProps) {
   const [nodes, setNodes] = useState<ModuleNode[]>([
-    { id: 'tasks', label: '任务舱', icon: CheckCircle, status: 'active', x: 30, y: 30, color: 'text-emerald-400 border-emerald-500/50 bg-emerald-900/20' },
-    { id: 'memory', label: '记忆库', icon: Brain, status: 'idle', x: 70, y: 30, color: 'text-purple-400 border-purple-500/50 bg-purple-900/20' },
-    { id: 'security', label: '安全层', icon: Shield, status: 'idle', x: 50, y: 70, color: 'text-cyan-400 border-cyan-500/50 bg-cyan-900/20' },
+    { id: 'tasks', label: '任务仓 / Task Pod', icon: CheckCircle, status: 'active', x: 25, y: 20, color: 'text-emerald-400 border-emerald-500/50 bg-emerald-900/20 shadow-[0_0_30px_rgba(16,185,129,0.2)]' },
+    { id: 'mcp_server', label: 'MCP 服务 / Servers', icon: Database, status: 'active', x: 12, y: 50, color: 'text-orange-400 border-orange-500/50 bg-orange-900/20 shadow-[0_0_30px_rgba(249,115,22,0.2)]' },
+    { id: 'security', label: '安全层 / Security', icon: Shield, status: 'idle', x: 25, y: 80, color: 'text-blue-400 border-blue-500/50 bg-blue-900/20 shadow-[0_0_30px_rgba(59,130,246,0.2)]' },
+    
+    { id: 'engine', label: '核心引擎 / Core', icon: Cpu, status: 'active', x: 50, y: 50, color: 'text-cyan-400 border-cyan-500/50 bg-cyan-900/20 shadow-[0_0_60px_rgba(6,182,212,0.3)]', size: 160 }, // Central Node
+    
+    { id: 'memory', label: '记忆流 / Memory', icon: Brain, status: 'idle', x: 75, y: 20, color: 'text-purple-400 border-purple-500/50 bg-purple-900/20 shadow-[0_0_30px_rgba(168,85,247,0.2)]' },
+    { id: 'workflows', label: '工作流 / Workflows', icon: GitBranch, status: 'idle', x: 88, y: 50, color: 'text-pink-400 border-pink-500/50 bg-pink-900/20 shadow-[0_0_30px_rgba(236,72,153,0.2)]' },
+    { id: 'neural_net', label: 'AI工作室 / Studio', icon: Network, status: 'warning', x: 75, y: 80, color: 'text-yellow-400 border-yellow-500/50 bg-yellow-900/20 shadow-[0_0_30px_rgba(234,179,8,0.2)]' },
   ]);
 
   // Simulated "Breathing" animation for nodes
@@ -32,8 +43,8 @@ export function IntelligentCenter({ active, onClose, onLaunchModule }: Intellige
     const interval = setInterval(() => {
       setNodes(prev => prev.map(n => ({
         ...n,
-        x: n.x + (Math.random() - 0.5) * 2, // Subtle drift
-        y: n.y + (Math.random() - 0.5) * 2
+        x: n.id === 'engine' ? 50 : n.x + (Math.random() - 0.5) * 0.5,
+        y: n.id === 'engine' ? 50 : n.y + (Math.random() - 0.5) * 0.5
       })));
     }, 2000);
     return () => clearInterval(interval);
@@ -46,38 +57,57 @@ export function IntelligentCenter({ active, onClose, onLaunchModule }: Intellige
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          // Darker background for Hub emphasis
-          className={`fixed inset-0 z-40 bg-black/80 ${YYC3_DESIGN.blur.glass} flex items-center justify-center overflow-hidden`}
-          onClick={(e) => {
-             if (e.target === e.currentTarget) onClose();
-          }}
+          className={`fixed inset-0 z-40 bg-[#020408]/70 backdrop-blur-3xl flex items-center justify-center overflow-hidden`}
         >
-          {/* Background Grid - Neural Network Vibe */}
-          <div className="absolute inset-0 opacity-20 pointer-events-none">
-             <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.1)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_70%,transparent_100%)]" />
+          {/* Background */}
+          <div className="absolute inset-0 z-0 opacity-40 pointer-events-none">
+             <img src={bgImage} alt="Background" className="w-full h-full object-cover" />
           </div>
 
-          <div className="relative w-full h-full max-w-4xl max-h-[80vh] mx-auto p-4">
+          <GestureContainer
+             onClose={onClose}
+             onMenu={() => onShowSwitcher && onShowSwitcher()}
+             className="relative w-full h-full max-w-6xl max-h-[90vh] mx-auto p-4 flex flex-col z-10"
+          >
+             {/* Close / Home Button (Gesture Area) */}
+              <div className="absolute top-6 left-6 z-50 pointer-events-auto">
+                 <Button 
+                    variant="outline" 
+                    className="rounded-full border-white/10 bg-black/40 text-white/60 hover:text-white hover:bg-white/10 hover:border-white/30 transition-all backdrop-blur-md"
+                    onClick={onClose}
+                 >
+                     <ArrowLeft className="w-4 h-4 mr-2" /> RETURN
+                 </Button>
+              </div>
+
              {/* Header */}
              <motion.div 
                initial={{ y: -50, opacity: 0 }}
                animate={{ y: 0, opacity: 1 }}
-               className="text-center mb-10"
+               className="text-center mb-4 z-10 mt-8"
              >
-                <h2 className="text-2xl font-light text-white tracking-[0.5em] uppercase">Intelligent Center</h2>
-                <div className="flex justify-center items-center gap-2 text-cyan-500/60 text-xs font-mono mt-2">
-                    <Activity className="w-3 h-3 animate-pulse" />
-                    SYSTEM OPTIMAL
+                <h2 className="text-3xl font-thin text-white tracking-[0.3em] uppercase font-mono">系统核心 / System Core</h2>
+                <div className="flex justify-center items-center gap-4 text-cyan-500/60 text-[10px] font-mono mt-2">
+                    <span className="flex items-center gap-1"><Activity className="w-3 h-3 animate-pulse" /> ONLINE</span>
+                    <span>|</span>
+                    <span>AI MODULES READY</span>
                 </div>
              </motion.div>
 
              {/* Nodes Container */}
-             <div className="relative w-full h-[60vh]">
-                {/* Connecting Lines (SVG) */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-30">
-                    <line x1="30%" y1="30%" x2="50%" y2="70%" stroke={YYC3_DESIGN.colors.cyan.primary} strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" />
-                    <line x1="70%" y1="30%" x2="50%" y2="70%" stroke={YYC3_DESIGN.colors.purple.primary} strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" />
-                    <line x1="30%" y1="30%" x2="70%" y2="30%" stroke={YYC3_DESIGN.colors.emerald.primary} strokeWidth="1" strokeOpacity="0.5" />
+             <div className="relative flex-1 w-full pointer-events-auto">
+                {/* Connecting Lines (SVG) - 50% Opacity */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-50">
+                    {/* Connections to Center Engine */}
+                    {/* Left Side */}
+                    <line x1="25%" y1="20%" x2="50%" y2="50%" stroke="#10b981" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* Task Pod */}
+                    <line x1="12%" y1="50%" x2="50%" y2="50%" stroke="#f97316" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* MCP */}
+                    <line x1="25%" y1="80%" x2="50%" y2="50%" stroke="#3b82f6" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* Security */}
+                    
+                    {/* Right Side */}
+                    <line x1="75%" y1="20%" x2="50%" y2="50%" stroke="#a855f7" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* Memory */}
+                    <line x1="88%" y1="50%" x2="50%" y2="50%" stroke="#ec4899" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* Workflows */}
+                    <line x1="75%" y1="80%" x2="50%" y2="50%" stroke="#eab308" strokeWidth="1" strokeDasharray="5,5" className="animate-pulse" /> {/* Neural Net */}
                 </svg>
 
                 {nodes.map((node) => (
@@ -91,45 +121,52 @@ export function IntelligentCenter({ active, onClose, onLaunchModule }: Intellige
                             scale: 1,
                             transition: YYC3_DESIGN.physics.spring
                         }}
-                        whileHover={{ scale: 1.2, zIndex: 10 }}
-                        whileTap={{ scale: 0.9 }}
+                        whileHover={{ scale: 1.1, zIndex: 10 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => onLaunchModule(node.id)}
-                        className={`absolute -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border backdrop-blur-md flex flex-col items-center justify-center gap-2 group shadow-[0_0_30px_rgba(0,0,0,0.5)] ${node.color}`}
+                        className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border backdrop-blur-md flex flex-col items-center justify-center gap-2 group transition-colors ${node.color}`}
+                        style={{ width: node.size || 120, height: node.size || 120 }}
                     >
-                        <node.icon className="w-8 h-8 opacity-80 group-hover:opacity-100 transition-opacity" />
-                        <span className="text-xs font-bold tracking-widest uppercase">{node.label}</span>
+                        <node.icon className={`${node.id === 'engine' ? 'w-12 h-12' : 'w-6 h-6'} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                        <span className="text-[10px] font-bold tracking-widest uppercase font-mono text-center px-2">{node.label}</span>
                         
                         {/* Status Ring */}
-                        <div className="absolute inset-0 rounded-full border border-current opacity-30 animate-[spin_10s_linear_infinite]" style={{ borderStyle: 'dashed' }} />
-                        <div className="absolute inset-[-4px] rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className={`absolute inset-0 rounded-full border border-current opacity-20 ${node.status === 'active' ? 'animate-[spin_10s_linear_infinite]' : ''}`} style={{ borderStyle: 'dashed' }} />
+                        <div className="absolute inset-[-4px] rounded-full border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity scale-110" />
+                        
+                        {/* Data Particles for Engine */}
+                        {node.id === 'engine' && (
+                             <div className="absolute inset-0 pointer-events-none">
+                                 <div className="absolute top-0 left-1/2 w-1 h-full bg-gradient-to-b from-transparent via-cyan-400/50 to-transparent animate-[spin_4s_linear_infinite]" />
+                                 <div className="absolute top-1/2 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent animate-[spin_4s_linear_infinite]" />
+                             </div>
+                        )}
                     </motion.button>
                 ))}
-
-                {/* Center "Core" */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-gradient-to-b from-cyan-500/10 to-blue-500/10 rounded-full blur-2xl animate-pulse" />
              </div>
 
              {/* Footer Data Stream */}
              <motion.div 
                 initial={{ y: 50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="absolute bottom-0 left-0 right-0 h-10 border-t border-white/5 bg-black/40 backdrop-blur flex items-center px-6 overflow-hidden"
+                className="h-12 border-t border-white/5 bg-black/40 backdrop-blur flex items-center px-6 overflow-hidden relative rounded-b-xl"
              >
-                <div className="flex gap-8 animate-[translateX_-50%_20s_linear_infinite] whitespace-nowrap text-[10px] font-mono text-white/30">
-                    <span>CPU: 12%</span>
-                    <span>MEMORY_VECTOR: 842 NODES</span>
-                    <span>SYNC_STATUS: CONNECTED</span>
-                    <span>LATENCY: 24ms</span>
-                    <span>SECURITY_LEVEL: ALPHA</span>
-                    <span>ACTIVE_AGENTS: 1</span>
-                    {/* Repeat for seamless loop */}
-                    <span>CPU: 12%</span>
-                    <span>MEMORY_VECTOR: 842 NODES</span>
-                    <span>SYNC_STATUS: CONNECTED</span>
-                    <span>LATENCY: 24ms</span>
+                <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-black to-transparent z-10" />
+                <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black to-transparent z-10" />
+                
+                <div className="flex gap-12 animate-[translateX_-50%_30s_linear_infinite] whitespace-nowrap text-[9px] font-mono text-cyan-500/40">
+                    {[...Array(5)].map((_, i) => (
+                        <div key={i} className="contents">
+                            <span>SYS_INTEGRITY: 100%</span>
+                            <span>EXTERNAL_LINKS: ACTIVE</span>
+                            <span>AI_MODELS: READY</span>
+                            <span>RENDER_ENGINE: WEBGL2</span>
+                            <span>LATENCY: 12ms</span>
+                        </div>
+                    ))}
                 </div>
              </motion.div>
-          </div>
+          </GestureContainer>
         </motion.div>
       )}
     </AnimatePresence>

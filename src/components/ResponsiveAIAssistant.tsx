@@ -7,14 +7,91 @@ import { OrbitalMenu } from './ai/OrbitalMenu';
 import { MultimodalArtifact } from './ai/MultimodalArtifact';
 import { IntelligentCenter } from './ai/IntelligentCenter'; 
 import { TaskPod } from './modules/TaskPod'; 
-import { Activity, Image as ImageIcon, MicOff, Send, AlertTriangle } from 'lucide-react'; 
+import { TerminalPanel } from './ai/TerminalPanel';
+import { MCPServerPanel } from './modules/MCPServerPanel';
+import { WorkflowPanel } from './modules/WorkflowPanel';
+import { AIGeneratorPanel } from './ai/AIGeneratorPanel';
+import { PageSwitcher } from './ui/PageSwitcher';
+import { SecurityModule } from './ai/SecurityModule';
+import { Activity, Image as ImageIcon, MicOff, Send, AlertTriangle, ChevronUp, Clock, Calendar, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerRightDown, CornerDownLeft, CornerUpRight, CornerUpLeft, Sparkles, Trash2, CheckCircle, Moon, Sun, Cpu, Wifi, Battery, Zap } from 'lucide-react'; 
 import { useSpeech } from '@/hooks/useSpeech';
 import { useAI } from '@/hooks/useAI';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner'; 
+import { YYC3_DESIGN } from '@/utils/design-system'; 
+import { YYC3Background } from './YYC3Background';
+import { useAppStore } from '@/stores/app-store';
+import { useAuthStore } from '@/stores/auth-store';
+
+// Brand logo / 品牌 Logo
+import logoMini from "figma:asset/0f4f28ac8ee9261af0049b986719468fb0b2a075.png";
+
+// --- Futuristic HUD Component ---
+const HUDOverlay = ({ themeColor, speechState }: { themeColor: 'cyan' | 'red', speechState: string }) => {
+    const colorClass = themeColor === 'cyan' ? 'text-cyan-400 border-cyan-500/30' : 'text-red-400 border-red-500/30';
+    const glowClass = themeColor === 'cyan' ? 'shadow-[0_0_10px_rgba(34,211,238,0.2)]' : 'shadow-[0_0_10px_rgba(248,113,113,0.2)]';
+
+    return (
+        <div className="absolute inset-4 pointer-events-none z-10 flex flex-col justify-between select-none overflow-hidden">
+            {/* Top Bar */}
+            <div className="flex justify-between items-start">
+                <div className={`flex items-center gap-2 border-l-2 ${colorClass} pl-2 opacity-70`}>
+                    <img 
+                        src={logoMini} 
+                        alt="YYCC" 
+                        className="w-5 h-5 object-contain"
+                        style={{ filter: themeColor === 'cyan' 
+                            ? 'drop-shadow(0 0 4px rgba(34,211,238,0.6))' 
+                            : 'drop-shadow(0 0 4px rgba(248,113,113,0.6)) hue-rotate(160deg) saturate(1.2)' 
+                        }}
+                    />
+                    <span className="font-mono text-[10px] tracking-widest">YYCC.CORE.V7</span>
+                </div>
+                <div className="flex gap-1">
+                     {[...Array(12)].map((_, i) => (
+                         <div key={i} className={`w-1 h-2 ${i < 8 ? (themeColor === 'cyan' ? 'bg-cyan-500' : 'bg-red-500') : 'bg-gray-800'} opacity-50`} />
+                     ))}
+                </div>
+                <div className={`flex items-center gap-2 border-r-2 ${colorClass} pr-2 opacity-70`}>
+                    <span className="font-mono text-[10px] tracking-widest">{new Date().toLocaleTimeString([], {hour12: false})}</span>
+                    <Wifi className="w-4 h-4" />
+                </div>
+            </div>
+
+            {/* Corner Brackets */}
+            <div className={`absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 ${colorClass}`} />
+            <div className={`absolute top-0 right-0 w-8 h-8 border-r-2 border-t-2 ${colorClass}`} />
+            <div className={`absolute bottom-0 left-0 w-8 h-8 border-l-2 border-b-2 ${colorClass}`} />
+            <div className={`absolute bottom-0 right-0 w-8 h-8 border-r-2 border-b-2 ${colorClass}`} />
+
+            {/* Side Data Lines */}
+            <div className="absolute top-1/2 left-0 -translate-y-1/2 w-1 h-24 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+            <div className="absolute top-1/2 right-0 -translate-y-1/2 w-1 h-24 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+
+            {/* Bottom Bar */}
+            <div className="flex justify-between items-end">
+                <div className="flex flex-col gap-1 opacity-60">
+                    <div className="text-[8px] font-mono text-white/40">COORDS: {Math.floor(Math.random()*1000)}.{Math.floor(Math.random()*100)} / {Math.floor(Math.random()*1000)}.{Math.floor(Math.random()*100)}</div>
+                    <div className={`h-[1px] w-24 ${themeColor === 'cyan' ? 'bg-cyan-500' : 'bg-red-500'}`} />
+                </div>
+                
+                {/* Status Indicator */}
+                <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono tracking-widest ${speechState === 'listening' ? 'animate-pulse text-white' : 'text-white/30'}`}>
+                        {speechState === 'listening' ? '● LISTENING' : '○ STANDBY'}
+                    </span>
+                    <Battery className="w-4 h-4 text-white/50" />
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export function ResponsiveAIAssistant() {
+  // --- Zustand Stores ---
+  const { themeColor, setThemeColor, toggleTheme, initializeTheme } = useAppStore();
+  const { connectionStatus } = useAuthStore();
+
   // --- UI State ---
   const [showConfig, setShowConfig] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -22,11 +99,14 @@ export function ResponsiveAIAssistant() {
   const [showOrbitalMenu, setShowOrbitalMenu] = useState(false); 
   const [showIntelligentCenter, setShowIntelligentCenter] = useState(false); 
   const [showTaskPod, setShowTaskPod] = useState(false); 
+  const [showMCPServer, setShowMCPServer] = useState(false); // NEW
+  const [showWorkflow, setShowWorkflow] = useState(false); // NEW
+  const [showAIGenerator, setShowAIGenerator] = useState(false); // NEW
+  const [showPageSwitcher, setShowPageSwitcher] = useState(false); // NEW
+  const [showSecurity, setShowSecurity] = useState(false); // Security Module
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 }); 
   const [showGuide, setShowGuide] = useState(true);
   const [textMode, setTextMode] = useState(false); 
-  const [textInput, setTextInput] = useState('');
-  const [themeColor, setThemeColor] = useState<'cyan' | 'red'>('cyan');
   
   // Artifact Inspection State
   const [inspectingArtifact, setInspectingArtifact] = useState<{type: 'image' | 'text', content: string} | null>(null);
@@ -54,8 +134,11 @@ export function ResponsiveAIAssistant() {
     config, 
     updateConfig, 
     processingState, 
-    sendMessage 
+    sendMessage,
+    setMessages 
   } = useAI(commands());
+
+  const clearMessages = () => setMessages([]);
 
   // --- Speech ---
   const { 
@@ -69,9 +152,12 @@ export function ResponsiveAIAssistant() {
       analyserNode
   } = useSpeech((finalTranscript) => {
       setShowGuide(false);
-      const images = pendingImage ? [pendingImage] : undefined;
-      setPendingImage(null); 
-      sendMessage(finalTranscript, images).then(handleAIResponse);
+      // If we are in text mode, don't auto-send, just let the transcript fill the input
+      if (!textMode) {
+          const images = pendingImage ? [pendingImage] : undefined;
+          setPendingImage(null); 
+          sendMessage(finalTranscript, images).then(handleAIResponse);
+      }
   });
 
   const handleAIResponse = useCallback((responseText: string) => {
@@ -82,25 +168,55 @@ export function ResponsiveAIAssistant() {
   useEffect(() => {
       if (speechError === 'permission-denied' || speechError === 'not-supported') {
           setTextMode(true);
-          toast.error("无法访问麦克风", {
-              description: "已自动切换至键盘输入模式。请检查浏览器权限设置。",
-              icon: <MicOff className="w-4 h-4" />
+          toast.error("AUDIO SYSTEM FAILURE", {
+              description: "Switching to manual input protocol.",
+              icon: <MicOff className="w-4 h-4" />,
+              style: { fontFamily: 'monospace' }
           });
           clearSpeechError();
       }
   }, [speechError, clearSpeechError, config]);
 
-  // --- Handlers ---
-  const handleTextSubmit = (e?: React.FormEvent) => {
-      e?.preventDefault();
-      if (!textInput.trim()) return;
+  // --- Navigation ---
+  const handleSwitchPage = (pageId: string) => {
+      // Close all panels
+      setShowTaskPod(false);
+      setShowMCPServer(false);
+      setShowWorkflow(false);
+      setShowAIGenerator(false);
+      setShowIntelligentCenter(false);
+      setShowHistory(false);
+      setShowConfig(false);
       
+      // Open selected
+      switch(pageId) {
+          case 'home': break; // Just close all overlays
+          case 'tasks': setShowTaskPod(true); break;
+          case 'mcp': setShowMCPServer(true); break;
+          case 'workflow': setShowWorkflow(true); break;
+          case 'ai_gen': setShowAIGenerator(true); break;
+          case 'intelligent': setShowIntelligentCenter(true); break;
+      }
+  };
+
+  const getCurrentPageId = () => {
+      if (showTaskPod) return 'tasks';
+      if (showMCPServer) return 'mcp';
+      if (showWorkflow) return 'workflow';
+      if (showAIGenerator) return 'ai_gen';
+      if (showIntelligentCenter) return 'intelligent';
+      return 'home';
+  };
+
+  // --- Handlers ---
+  const handleTerminalSubmit = (text: string, image?: string) => {
       setShowGuide(false);
-      const images = pendingImage ? [pendingImage] : undefined;
+      setTextMode(false); 
+      
+      const images = image ? [image] : undefined;
       setPendingImage(null);
       
-      sendMessage(textInput, images).then(handleAIResponse);
-      setTextInput('');
+      sendMessage(text, images).then(handleAIResponse);
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
@@ -117,7 +233,7 @@ export function ResponsiveAIAssistant() {
               const base64 = result.split(',')[1];
               setInspectingArtifact({ type: 'image', content: base64 });
               setPendingImage(base64);
-              if (!textMode) speak("已捕获视觉数据。您可以查看全息投影。", config);
+              if (!textMode) speak("Visual data captured. Rendering hologram.", config);
           };
           reader.readAsDataURL(file);
       }
@@ -126,6 +242,9 @@ export function ResponsiveAIAssistant() {
   // --- Derived State ---
   const [debateStatus, setDebateStatus] = useState<'idle' | 'processing' | 'speaking'>('idle');
   const currentVisualState = debateStatus !== 'idle' ? debateStatus : (processingState === 'processing' ? 'processing' : speechState);
+  
+  // --- Message Visibility State (Auto-dismiss) ---
+  const [isMessageVisible, setIsMessageVisible] = useState(true);
 
   // --- Effects ---
   useEffect(() => {
@@ -133,18 +252,31 @@ export function ResponsiveAIAssistant() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Initialize theme from Zustand store on mount
+  useEffect(() => {
+    initializeTheme();
+  }, [initializeTheme]);
+
+  // Auto-dismiss message after 1 minute
+  useEffect(() => {
+    if (messages.length > 0) {
+      setIsMessageVisible(true);
+      const timer = setTimeout(() => {
+        setIsMessageVisible(false);
+      }, 60000); // 60 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
+
   // --- Gestures ---
   const handleTouchStart = (e: React.PointerEvent) => {
-    // Block triggers if any modal is open
-    if (textMode || showDebate || showConfig || showHistory || showOrbitalMenu || inspectingArtifact || showIntelligentCenter || showTaskPod) return; 
+    if (textMode || showDebate || showConfig || showHistory || showOrbitalMenu || inspectingArtifact || showIntelligentCenter || showTaskPod || showMCPServer || showWorkflow || showAIGenerator) return; 
     
-    // 1. Long Press for Speech
     longPressTimerRef.current = setTimeout(() => {
       startListening();
       if (navigator.vibrate) navigator.vibrate(50);
     }, 600); 
 
-    // 2. Double Tap Logic
     tapCountRef.current += 1;
     if (tapCountRef.current === 2) {
         clearTimeout(longPressTimerRef.current!); 
@@ -184,30 +316,70 @@ export function ResponsiveAIAssistant() {
   };
 
   const handlePanEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (textMode || showDebate || showConfig || showHistory || inspectingArtifact || showIntelligentCenter || showTaskPod) return; 
-    const threshold = 60;
+    if (textMode || showDebate || showConfig || showHistory || inspectingArtifact || showIntelligentCenter || showTaskPod || showMCPServer || showWorkflow || showAIGenerator) return; 
     
-    // Swipe Up -> Text Mode
-    if (info.offset.y < -threshold) { 
-        setTextMode(true);
-        setShowGuide(false); 
+    const threshold = 60; 
+    const x = info.offset.x;
+    const y = info.offset.y;
+    const absX = Math.abs(x);
+    const absY = Math.abs(y);
+
+    const isDiagonal = absX > threshold && absY > threshold;
+
+    if (isDiagonal) {
+        setShowGuide(false);
+        if (navigator.vibrate) navigator.vibrate([20, 20]);
+
+        if (x > 0 && y > 0) {
+            setShowTaskPod(true);
+            toast("PROTOCOL: TASK_POD", { icon: <CheckCircle className="w-4 h-4 text-emerald-400"/> });
+        } else if (x < 0 && y > 0) {
+            setShowDebate(true);
+            toast("PROTOCOL: DEBATE_MATRIX", { icon: <Activity className="w-4 h-4 text-pink-400"/> });
+        } else if (x > 0 && y < 0) {
+            toast("SESSION REBOOT", { description: "Context cleared.", icon: <Sparkles className="w-4 h-4 text-yellow-400"/> });
+        } else if (x < 0 && y < 0) {
+            const newTheme = themeColor === 'cyan' ? 'red' : 'cyan';
+            setThemeColor(newTheme);
+            toast(`SYSTEM THEME: ${newTheme.toUpperCase()}`, { 
+                icon: newTheme === 'cyan' ? <Moon className="w-4 h-4 text-cyan-400"/> : <Sun className="w-4 h-4 text-red-400"/> 
+            });
+        }
+        return;
     }
-    // Swipe Right -> History
-    else if (info.offset.x > threshold) { 
-        setShowHistory(true); 
-        setShowGuide(false); 
+
+    if (absY > absX && absY > threshold) {
+        if (y < 0) { 
+            setTextMode(true);
+            setShowGuide(false); 
+            if (navigator.vibrate) navigator.vibrate(20);
+        } else { 
+            setShowHistory(true); 
+            setShowGuide(false); 
+            if (navigator.vibrate) navigator.vibrate(20);
+        }
+    } else if (absX > absY && absX > threshold) {
+        if (x < 0) {
+             setShowIntelligentCenter(true);
+             setShowGuide(false);
+             if (navigator.vibrate) navigator.vibrate(20);
+        } else {
+             setShowConfig(true);
+             setShowGuide(false);
+             if (navigator.vibrate) navigator.vibrate(20);
+        }
     }
   };
 
   // --- Theme ---
   const isRed = themeColor === 'red';
   const themeClasses = {
-      bg: isRed ? 'bg-[#1a0505] text-red-100' : 'bg-[#05080f] text-slate-100',
-      blob1: isRed ? 'bg-red-900/20' : 'bg-cyan-900/10',
-      blob2: isRed ? 'bg-orange-900/20' : 'bg-blue-900/10',
-      visualizer: isRed ? 'bg-orange-500' : 'bg-red-500',
-      historyBg: isRed ? 'bg-[#1a0505]/95 border-red-500/20' : 'bg-[#0a0f1c]/95 border-cyan-500/20',
-      userMsg: isRed ? 'bg-red-900/30 text-red-100 border-red-500/20' : 'bg-cyan-900/30 text-cyan-100 border-cyan-500/20',
+      bg: isRed ? 'bg-[#0f0202] text-red-100' : 'bg-[#020610] text-cyan-100',
+      blob1: isRed ? 'bg-red-900/10' : 'bg-cyan-900/10',
+      blob2: isRed ? 'bg-orange-900/10' : 'bg-blue-900/10',
+      visualizer: isRed ? 'bg-orange-500' : 'bg-cyan-400',
+      historyBg: isRed ? 'bg-[#0f0202]/95 border-red-500/20' : 'bg-[#020610]/95 border-cyan-500/20',
+      userMsg: isRed ? 'bg-red-500/10 text-red-100 border-red-500/20' : 'bg-cyan-500/10 text-cyan-100 border-cyan-500/20',
       divider: isRed ? 'via-red-500/50' : 'via-cyan-500/50',
       dropOverlay: isRed ? 'bg-red-900/50 border-red-400' : 'bg-cyan-900/50 border-cyan-400'
   };
@@ -223,84 +395,161 @@ export function ResponsiveAIAssistant() {
       onDrop={handleDrop}
       onPanEnd={handlePanEnd}
     >
-      {/* 1. Ambient Background */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* 1. Futuristic Background Grid */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        {/* YYC3 ASCII Art Background */}
+        <YYC3Background />
+        
+        {/* Grid Lines */}
+        <div className={`absolute inset-0 opacity-[0.03]`} 
+             style={{ 
+                 backgroundImage: `linear-gradient(${isRed ? '#ff0000' : '#00ffff'} 1px, transparent 1px), linear-gradient(90deg, ${isRed ? '#ff0000' : '#00ffff'} 1px, transparent 1px)`,
+                 backgroundSize: '40px 40px'
+             }}>
+        </div>
+        {/* Radial Glow */}
         <motion.div 
-          animate={{ opacity: [0.3, 0.5, 0.3], scale: [1, 1.1, 1] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className={`absolute top-[-20%] left-[-10%] w-[80vw] h-[80vw] rounded-full blur-[100px] transition-colors duration-1000 ${themeClasses.blob1}`} 
+          animate={{ opacity: [0.2, 0.4, 0.2] }}
+          transition={{ duration: 8, repeat: Infinity }}
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full blur-[120px] ${isRed ? 'bg-red-900/20' : 'bg-cyan-900/20'}`} 
         />
-        <motion.div 
-          animate={{ opacity: [0.2, 0.4, 0.2], scale: [1.1, 1, 1.1] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className={`absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] rounded-full blur-[100px] transition-colors duration-1000 ${themeClasses.blob2}`} 
-        />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 mix-blend-overlay"></div>
+        {/* Scanlines */}
+        <div className="absolute inset-0 z-50 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,6px_100%] pointer-events-none opacity-20"></div>
       </div>
 
-      {/* 2. Drag Overlay */}
+      {/* 2. Drag Overlay (Holographic) */}
       <AnimatePresence>
         {isDragging && (
             <motion.div 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className={`absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm border-4 border-dashed m-4 rounded-3xl ${themeClasses.dropOverlay}`}
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                className={`absolute inset-0 z-50 flex items-center justify-center backdrop-blur-md border-2 border-dashed m-8 rounded-xl ${themeClasses.dropOverlay}`}
             >
-                <div className="text-2xl font-light tracking-widest animate-pulse flex flex-col items-center gap-4">
-                    <ImageIcon className="w-16 h-16" />
-                    投喂图像数据
+                <div className="text-xl font-mono tracking-widest animate-pulse flex flex-col items-center gap-6 text-center">
+                    <div className="relative">
+                        <ImageIcon className="w-20 h-20 opacity-50" />
+                        <motion.div 
+                           animate={{ rotate: 360 }}
+                           transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                           className="absolute inset-[-10px] border-t-2 border-b-2 border-current rounded-full opacity-30" 
+                        />
+                    </div>
+                    <div>
+                        <p>DATA INGESTION MODE</p>
+                        <p className="text-xs opacity-50 mt-2">RELEASE TO ANALYZE</p>
+                    </div>
                 </div>
             </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 3. Guide Overlay */}
+      {/* 3. Guide Overlay - Tech Style */}
       <AnimatePresence>
-        {showGuide && !isDragging && !speechError && !textMode && !showDebate && !inspectingArtifact && !showIntelligentCenter && !showTaskPod && (
+        {showGuide && !isDragging && !speechError && !textMode && !showDebate && !inspectingArtifact && !showIntelligentCenter && !showTaskPod && !showMCPServer && !showWorkflow && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 z-15 flex flex-col items-center justify-center pointer-events-none"
+            className="absolute inset-0 z-15 pointer-events-none"
           >
-             <div className="absolute top-1/4 text-white/20 text-sm font-light tracking-[0.2em] animate-pulse">长按说话 · 双击菜单</div>
-             <div className="absolute bottom-1/4 text-white/20 text-sm font-light tracking-[0.2em] animate-pulse">上滑打字 · 右滑记忆</div>
+             {/* Center Hints */}
+             <div className="absolute inset-0 flex flex-col items-center justify-center">
+                 <div className="text-white/30 text-[10px] font-mono tracking-[0.3em] animate-pulse border px-4 py-1 border-white/10 rounded-full bg-black/20 backdrop-blur-sm">
+                     HOLD: VOICE // DOUBLE: MENU
+                 </div>
+             </div>
+
+             {/* Cardinal Points */}
+             <div className="absolute top-16 w-full flex justify-center opacity-40 animate-pulse">
+                <div className="flex flex-col items-center gap-1">
+                    <ArrowUp className="w-3 h-3" />
+                    <span className="text-[9px] font-mono tracking-widest">INPUT_TERMINAL</span>
+                </div>
+             </div>
+             <div className="absolute bottom-16 w-full flex justify-center opacity-40 animate-pulse">
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-mono tracking-widest">MEMORY_STREAM</span>
+                    <ArrowDown className="w-3 h-3" />
+                </div>
+             </div>
+             <div className="absolute left-8 top-1/2 -translate-y-1/2 opacity-40 animate-pulse">
+                <div className="flex flex-col items-center gap-1 -rotate-90">
+                    <ArrowLeft className="w-3 h-3 rotate-90" />
+                    <span className="text-[9px] font-mono tracking-widest">NEURAL_HUB</span>
+                </div>
+             </div>
+             <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-40 animate-pulse">
+                <div className="flex flex-col items-center gap-1 rotate-90">
+                    <ArrowRight className="w-3 h-3 -rotate-90" />
+                    <span className="text-[9px] font-mono tracking-widest">SYS_CONFIG</span>
+                </div>
+             </div>
+
+             {/* Diagonal Points */}
+             <div className="absolute top-16 left-12 opacity-30 animate-pulse hidden md:block">
+                 <div className="flex flex-col items-center gap-1 -rotate-45">
+                     <CornerRightDown className="w-3 h-3" />
+                     <span className="text-[8px] font-mono tracking-widest">TASK_POD</span>
+                 </div>
+             </div>
+             <div className="absolute top-16 right-12 opacity-30 animate-pulse hidden md:block">
+                 <div className="flex flex-col items-center gap-1 rotate-45">
+                     <CornerDownLeft className="w-3 h-3" />
+                     <span className="text-[8px] font-mono tracking-widest">DEBATE_MOD</span>
+                 </div>
+             </div>
+             <div className="absolute bottom-16 left-12 opacity-30 animate-pulse hidden md:block">
+                 <div className="flex flex-col items-center gap-1 -rotate-135">
+                     <CornerUpRight className="w-3 h-3" />
+                     <span className="text-[8px] font-mono tracking-widest">RST_SESSION</span>
+                 </div>
+             </div>
+             <div className="absolute bottom-16 right-12 opacity-30 animate-pulse hidden md:block">
+                 <div className="flex flex-col items-center gap-1 rotate-135">
+                     <CornerUpLeft className="w-3 h-3" />
+                     <span className="text-[8px] font-mono tracking-widest">TGL_THEME</span>
+                 </div>
+             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 4. Main Stage (Zero UI - No HUD) */}
+      {/* 4. Persistent HUD Overlay */}
+      {!textMode && !showDebate && !showHistory && (
+          <HUDOverlay themeColor={themeColor} speechState={speechState} />
+      )}
+
+      {/* 5. Main Stage */}
       <div className="relative z-20 h-full flex flex-col items-center justify-center pointer-events-none">
         
         {/* Core Visual */}
-        <div className={`pointer-events-auto z-30 transition-all duration-500 ${textMode ? 'scale-75 -translate-y-12' : ''}`}>
+        <div className={`pointer-events-auto z-30 transition-all duration-700 ${textMode ? 'scale-75 -translate-y-12 blur-sm opacity-50' : ''}`}>
            <CubeVisual 
              state={currentVisualState} 
              onClick={() => {
-                 if (textMode || showDebate || inspectingArtifact || showIntelligentCenter || showTaskPod) return;
+                 if (textMode || showDebate || inspectingArtifact || showIntelligentCenter || showTaskPod || showMCPServer || showWorkflow || showAIGenerator) return;
                  speechState === 'listening' ? stopListening() : startListening();
              }}
              analyserNode={analyserNode}
            />
+           {/* Floor Reflection */}
+           <div className={`absolute -bottom-24 left-1/2 -translate-x-1/2 w-48 h-12 bg-gradient-to-t from-transparent ${isRed ? 'via-red-500/10' : 'via-cyan-500/10'} to-transparent opacity-50 blur-xl rounded-full transform scale-x-150`} />
         </div>
 
-        {/* Captions */}
-        <div className={`absolute bottom-24 w-full px-6 text-center transition-all duration-500 ${textMode ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        {/* Captions - Holographic Style */}
+        <div className={`absolute bottom-32 w-full px-6 text-center transition-all duration-500 ${textMode ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
            <AnimatePresence mode="wait">
-             {messages.length > 0 ? (
+             {messages.length > 0 && isMessageVisible ? (
                <motion.div
                  key={messages[messages.length - 1].id}
-                 initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
-                 animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                 exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-                 className="max-w-md mx-auto"
+                 initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                 animate={{ opacity: 1, y: 0, scale: 1 }}
+                 exit={{ opacity: 0, y: 20, scale: 0.9, filter: "blur(10px)" }}
+                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                 className="max-w-2xl mx-auto"
                >
-                 <p className="text-xl md:text-2xl font-light text-white/90 leading-relaxed drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                   "{messages[messages.length - 1].content}"
-                 </p>
-                 {messages[messages.length - 1].role === 'assistant' && (
-                   <motion.div 
-                     initial={{ width: 0 }} animate={{ width: "100%" }}
-                     className={`h-[1px] bg-gradient-to-r from-transparent ${themeClasses.divider} to-transparent mt-4 mx-auto max-w-[100px]`}
-                   />
-                 )}
+                 <div className={`inline-block text-lg md:text-xl font-light leading-relaxed tracking-wide px-8 py-6 rounded-2xl backdrop-blur-xl border ${isRed ? 'bg-[#0f0505]/90 border-red-500/30 shadow-[0_0_40px_rgba(220,38,38,0.15)]' : 'bg-[#020610]/90 border-cyan-500/30 shadow-[0_0_40px_rgba(8,145,178,0.15)]'}`}>
+                   <span className={isRed ? 'text-red-100' : 'text-cyan-100'}>
+                        {messages[messages.length - 1].content}
+                   </span>
+                 </div>
                </motion.div>
              ) : (<div className="h-8" />)}
            </AnimatePresence>
@@ -310,157 +559,222 @@ export function ResponsiveAIAssistant() {
         {!textMode && speechState === 'listening' && (
            <motion.div 
              initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-             className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-1"
+             className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-1.5"
            >
-              {[...Array(5)].map((_, i) => (
+              {[...Array(7)].map((_, i) => (
                 <motion.div
                   key={i}
-                  animate={{ height: [10, 30, 10] }}
-                  transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
-                  className={`w-1 rounded-full ${themeClasses.visualizer}`}
+                  animate={{ height: [5, 25, 5], opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 0.4, repeat: Infinity, delay: i * 0.05 }}
+                  className={`w-1 rounded-sm ${themeClasses.visualizer} shadow-[0_0_8px_currentColor]`}
                 />
               ))}
            </motion.div>
         )}
       </div>
 
-      {/* 5. Text Mode Input (Gesture Triggered) */}
-      <AnimatePresence>
-        {textMode && (
-            <motion.div 
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                className="absolute bottom-0 inset-x-0 p-6 z-40 bg-gradient-to-t from-black/90 to-transparent pb-10 pointer-events-auto"
-            >
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-red-400 flex items-center gap-1 opacity-70">
-                         {speechError === 'permission-denied' && <><AlertTriangle className="w-3 h-3"/> 语音系统离线</>}
-                    </span>
-                    <Button variant="ghost" size="sm" onClick={() => setTextMode(false)} className="text-white/50 hover:text-white">
-                         <MicOff className="w-4 h-4 mr-1" /> 关闭键盘
-                    </Button>
-                </div>
-                <form onSubmit={handleTextSubmit} className="max-w-md mx-auto relative flex gap-2">
-                    <Input 
-                        value={textInput}
-                        onChange={(e) => setTextInput(e.target.value)}
-                        placeholder="输入指令或对话..."
-                        className="bg-white/10 border-white/10 text-white placeholder:text-white/30 backdrop-blur-md rounded-2xl h-12 px-4 focus:ring-1 focus:ring-cyan-500/50"
-                        autoFocus
-                    />
-                    <Button type="submit" size="icon" className="h-12 w-12 rounded-2xl bg-cyan-600 hover:bg-cyan-500">
-                        <Send className="w-5 h-5" />
-                    </Button>
-                </form>
-            </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 6. Text Mode Input (Terminal Style) - UPGRADED */}
+      <TerminalPanel 
+         isOpen={textMode}
+         onClose={() => setTextMode(false)}
+         onSubmit={handleTerminalSubmit}
+         speechState={speechState}
+         onStartListening={startListening}
+         onStopListening={stopListening}
+         transcript={transcript}
+         pendingImage={pendingImage}
+         setPendingImage={setPendingImage}
+      />
 
-      {/* 6. History Drawer (Gesture Triggered) */}
+      {/* 7. Memory Stream (History) - Cyberpunk Style */}
       <AnimatePresence>
         {showHistory && (
           <motion.div
-            initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className={`absolute inset-y-0 right-0 w-full md:w-96 backdrop-blur-xl border-l z-40 flex flex-col pointer-events-auto ${themeClasses.historyBg}`}
+            initial={{ y: "-100%" }} 
+            animate={{ y: 0 }}
+            exit={{ y: "-100%" }}
+            transition={{ type: "spring", damping: 25 }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            onDragEnd={(e, info) => {
+                if (info.offset.y < -50) setShowHistory(false); 
+            }}
+            className={`absolute inset-0 z-40 flex flex-col pointer-events-auto backdrop-blur-3xl ${themeClasses.historyBg}`}
           >
-             <div className="p-6 border-b border-white/10 flex justify-between items-center">
-                 <h2 className="text-lg font-bold text-white">思维链记忆</h2>
-                 <Button variant="ghost" size="icon" onClick={() => setShowHistory(false)}>
-                     <Activity className="w-5 h-5 text-gray-400" />
-                 </Button>
+             {/* Header */}
+             <div className="pt-12 pb-4 px-6 border-b border-white/10 flex justify-between items-end bg-gradient-to-b from-black to-transparent">
+                 <div>
+                    <h2 className="text-2xl font-light text-white tracking-widest uppercase flex items-center gap-3">
+                        <Clock className="w-6 h-6 text-cyan-500" />
+                        <span className="font-mono">MEMORY_LOGS</span>
+                    </h2>
+                    <p className="text-[10px] font-mono text-cyan-500/50 mt-2 flex items-center gap-2">
+                        <span>SESSION_ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</span>
+                    </p>
+                 </div>
+                 <div className="opacity-50 text-[10px] font-mono text-right">
+                    <div>ENCRYPTED // {messages.length} FRAGMENTS</div>
+                    <div className="mt-1 text-white/30">SWIPE UP TO DISMISS</div>
+                 </div>
              </div>
-             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        {msg.images && msg.images.map((img, idx) => (
-                            <div key={idx} onClick={() => {
-                                setInspectingArtifact({ type: 'image', content: img });
-                                setShowHistory(false);
-                            }}>
-                                <img src={`data:image/jpeg;base64,${img}`} className="w-32 h-32 object-cover rounded-xl border border-white/10 cursor-pointer hover:border-cyan-500/50 transition-colors" />
-                            </div>
-                        ))}
-                        <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                        msg.role === 'user' 
-                        ? themeClasses.userMsg + ' border'
-                        : 'bg-white/5 opacity-80 border border-white/5'
-                        }`}>
-                        {msg.content}
-                        </div>
+
+             {/* Content Stream */}
+             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full opacity-30 gap-4">
+                        <Activity className="w-16 h-16 text-cyan-500/50" />
+                        <p className="font-mono text-sm">NO DATA FRAGMENTS FOUND</p>
                     </div>
-                  </div>
+                )}
+
+                {messages.map((msg, index) => (
+                  <motion.div 
+                    key={msg.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                     <div className="flex items-center gap-2 opacity-50">
+                        <span className="text-[10px] font-mono">{msg.role === 'user' ? 'CMD_INPUT' : 'SYS_RESPONSE'}</span>
+                        <div className={`h-[1px] w-12 ${isRed ? 'bg-red-500' : 'bg-cyan-500'}`} />
+                     </div>
+                     <div className={`max-w-[80%] p-4 rounded-2xl border backdrop-blur-md ${
+                        msg.role === 'user' 
+                        ? themeClasses.userMsg
+                        : 'bg-white/5 border-white/10 text-gray-300'
+                     }`}>
+                        {msg.images && msg.images.length > 0 && (
+                             <div className="mb-3">
+                                 <img src={`data:image/jpeg;base64,${msg.images[0]}`} className="rounded-lg max-h-40 border border-white/10" alt="Context" />
+                             </div>
+                        )}
+                        <p className="text-sm font-light leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                     </div>
+                  </motion.div>
                 ))}
              </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 7. Orbital Menu (Gesture Triggered) */}
-      <OrbitalMenu 
-         isOpen={showOrbitalMenu}
-         setIsOpen={setShowOrbitalMenu}
-         position={menuPosition}
-         onOpenSettings={() => setShowConfig(true)}
-         onOpenHistory={() => setShowHistory(true)}
-         onOpenDebate={() => setShowDebate(true)}
-         onToggleTextMode={() => setTextMode(true)}
-         onOpenHub={() => setShowIntelligentCenter(true)}
-      />
-
-      {/* 8. Config Panel (Floating Modal) */}
+      {/* 8. Configuration Panel */}
       <ConfigPanel 
-        isOpen={showConfig}
-        onClose={() => setShowConfig(false)}
+        isOpen={showConfig} 
+        onClose={() => setShowConfig(false)} 
         config={config}
         onSave={updateConfig}
       />
 
-      {/* 9. Debate Overlay */}
-      <DebateOverlay 
-        isOpen={showDebate}
-        onClose={() => setShowDebate(false)}
-        mainConfig={config}
-        onSpeak={speak}
-        onStatusChange={setDebateStatus}
+      {/* 9. Intelligent Center (Left Swipe) - UPGRADED */}
+      <IntelligentCenter 
+         active={showIntelligentCenter}
+         onClose={() => setShowIntelligentCenter(false)}
+         onShowSwitcher={() => setShowPageSwitcher(true)}
+         onLaunchModule={(id) => {
+             setShowIntelligentCenter(false);
+             if (id === 'tasks') setShowTaskPod(true);
+             if (id === 'engine') setShowConfig(true);
+             if (id === 'memory') setShowHistory(true);
+             
+             // Mapped Functions for User Request
+             if (id === 'security') setShowSecurity(true);
+             if (id === 'neural_net') setShowAIGenerator(true);
+             if (id === 'mcp_server') setShowMCPServer(true);
+             if (id === 'workflows') setShowWorkflow(true);
+         }}
       />
 
-      {/* 10. Multimodal Artifact Inspection */}
-      <AnimatePresence>
-        {inspectingArtifact && (
-            <MultimodalArtifact 
-                type={inspectingArtifact.type}
-                content={inspectingArtifact.content}
-                transcript={speechState === 'listening' ? transcript : ''}
-                onClose={() => setInspectingArtifact(null)}
-            />
-        )}
-      </AnimatePresence>
+      {/* 10. Task Pod (Diagonal Top-Left) */}
+      <TaskPod 
+         isOpen={showTaskPod}
+         onClose={() => setShowTaskPod(false)}
+         onShowSwitcher={() => setShowPageSwitcher(true)}
+      />
 
-      {/* 11. Intelligent Center (Hub) */}
-      <IntelligentCenter 
-        active={showIntelligentCenter}
-        onClose={() => setShowIntelligentCenter(false)}
-        onLaunchModule={(id) => {
-            if (id === 'tasks') {
-                setShowIntelligentCenter(false);
-                setShowTaskPod(true);
-            } else {
-                toast.info("模块构建中", {
-                  description: "该神经节点尚未激活",
-                  icon: <Brain className="w-4 h-4 text-purple-400" />
-                });
-            }
+      {/* 11. Orbital Menu (Double Tap) */}
+      <OrbitalMenu 
+        isOpen={showOrbitalMenu}
+        onClose={() => setShowOrbitalMenu(false)}
+        position={menuPosition}
+        onSelect={(id) => {
+            if (id === 'history') setShowHistory(true);
+            if (id === 'config') setShowConfig(true);
+            if (id === 'hub') setShowIntelligentCenter(true);
+            if (id === 'debate') setShowDebate(true);
+            if (id === 'textmode') setTextMode(true);
+            if (id === 'reset') clearMessages();
+            if (id === 'theme') toggleTheme();
         }}
       />
 
-      {/* 12. Zero UI Task Pod (Case 1) */}
-      <TaskPod 
-        isOpen={showTaskPod}
-        onClose={() => setShowTaskPod(false)}
-        transcript={speechState === 'listening' ? transcript : ''}
+      {/* 12. Debate Overlay (Diagonal Top-Right) */}
+      <DebateOverlay 
+         isOpen={showDebate}
+         onClose={() => setShowDebate(false)}
+         initialTopic={messages.length > 0 ? messages[messages.length - 1].content : "The Future of AI"}
+         mainConfig={config}
+         onSpeak={speak}
+         onStatusChange={setDebateStatus}
+      />
+
+      {/* 13. Artifact Inspector (Image Viewer) */}
+      <AnimatePresence>
+         {inspectingArtifact && (
+             <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-xl flex items-center justify-center p-8"
+                onClick={() => setInspectingArtifact(null)}
+             >
+                 <motion.div 
+                    initial={{ scale: 0.8 }} animate={{ scale: 1 }}
+                    className="relative max-w-full max-h-full"
+                    onClick={e => e.stopPropagation()}
+                 >
+                     <img 
+                        src={`data:image/jpeg;base64,${inspectingArtifact.content}`} 
+                        className="rounded-lg border border-cyan-500/50 shadow-[0_0_50px_rgba(8,145,178,0.3)]" 
+                        alt="Artifact"
+                     />
+                     <div className="absolute -bottom-12 left-0 right-0 text-center">
+                         <p className="text-xs font-mono text-cyan-500 tracking-widest">ARTIFACT_ID: {Math.random().toString(16).substr(2, 8).toUpperCase()}</p>
+                     </div>
+                 </motion.div>
+             </motion.div>
+         )}
+      </AnimatePresence>
+
+      {/* 14. Multimodal Artifact Container (Dynamic Elements) */}
+      <MultimodalArtifact messages={messages} />
+
+      {/* 15. New Modules: MCP, Workflow, AI Gen */}
+      <MCPServerPanel 
+          isOpen={showMCPServer} 
+          onClose={() => setShowMCPServer(false)} 
+          onShowSwitcher={() => setShowPageSwitcher(true)}
+      />
+      <WorkflowPanel 
+          isOpen={showWorkflow} 
+          onClose={() => setShowWorkflow(false)} 
+          onShowSwitcher={() => setShowPageSwitcher(true)}
+      />
+      <AIGeneratorPanel 
+          isOpen={showAIGenerator} 
+          onClose={() => setShowAIGenerator(false)} 
+          onShowSwitcher={() => setShowPageSwitcher(true)}
+      />
+
+      {/* 16. Security Module */}
+      <SecurityModule 
+          isOpen={showSecurity}
+          onClose={() => setShowSecurity(false)}
+      />
+
+      <PageSwitcher 
+          isOpen={showPageSwitcher} 
+          onClose={() => setShowPageSwitcher(false)} 
+          onSwitch={handleSwitchPage}
+          currentPage={getCurrentPageId()}
       />
 
     </motion.div>

@@ -1,15 +1,3 @@
-export type LLMConfig = {
-    provider: 'ollama' | 'openai' | 'deepseek' | 'moonshot';
-    baseUrl: string;
-    apiKey: string;
-    model: string;
-    systemPrompt?: string;
-    // TTS Settings
-    ttsProvider: 'browser' | 'openai' | 'edge'; // Edge implemented via external API if possible, or just placeholder
-    ttsModel: string;
-    ttsVoice: string;
-    ttsSpeed: number;
-};
 
 // 增加 UI 控制指令说明
 const UI_CONTROL_PROMPT = `
@@ -25,6 +13,9 @@ const UI_CONTROL_PROMPT = `
 例如，当用户说“打开设置”时，请回复：“已为您调出神经中枢面板。[[CMD:OPEN_SETTINGS]]”
 `;
 
+import { LLMConfig, MessageContent } from '@/types';
+import { validateLLMConfig, validateMessages } from './validation';
+
 export const DEFAULT_CONFIG: LLMConfig = {
     provider: 'ollama',
     baseUrl: 'http://localhost:11434',
@@ -37,6 +28,8 @@ export const DEFAULT_CONFIG: LLMConfig = {
     ttsSpeed: 1.0
 };
 
+export { LLMConfig, MessageContent };
+
 // 模拟回复生成器（当API无法连接时使用）
 const MOCK_RESPONSES = [
     "正在校准神经元连接... 检测到本地环境限制。这是来自言语云魔方的模拟信号。",
@@ -45,16 +38,21 @@ const MOCK_RESPONSES = [
     "检测到情感波动。虽然我只是原型机，但我能感受到您对未来的期待。"
 ];
 
-export interface MessageContent {
-    role: string;
-    content: string;
-    images?: string[]; // Base64 strings
-}
-
 export async function generateCompletion(
     messages: MessageContent[],
     config: LLMConfig
 ): Promise<string> {
+    // 1. 参数验证
+    const configCheck = validateLLMConfig(config);
+    if (!configCheck.valid) {
+        throw new Error(`Configuration Error: ${configCheck.error}`);
+    }
+
+    const msgCheck = validateMessages(messages);
+    if (!msgCheck.valid) {
+        throw new Error(`Message Error: ${msgCheck.error}`);
+    }
+
     // 插入系统提示词 (如果没有被用户覆盖，则追加 UI 控制指令)
     let sysPrompt = config.systemPrompt || DEFAULT_CONFIG.systemPrompt;
     if (!sysPrompt?.includes('[[CMD:')) {
@@ -67,13 +65,18 @@ export async function generateCompletion(
     ];
 
     try {
+        if (!config.baseUrl) {
+            console.warn("[LLM] config.baseUrl is missing, using default.");
+            config.baseUrl = DEFAULT_CONFIG.baseUrl;
+        }
+
         let url = '';
         let headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
         let body: any = {};
 
-        // 1. 构建请求
+        // 2. 构建请求
         if (config.provider === 'ollama') {
             // Ollama API
             url = `${config.baseUrl.replace(/\/$/, '')}/api/chat`;
@@ -88,7 +91,12 @@ export async function generateCompletion(
             body = {
                 model: config.model,
                 messages: ollamaMessages,
-                stream: false
+                stream: false,
+                options: {
+                    temperature: config.temperature,
+                    top_p: config.topP,
+                    num_predict: config.maxTokens
+                }
             };
         } else {
             // OpenAI Compatible (DeepSeek, Moonshot, etc.)
@@ -119,15 +127,17 @@ export async function generateCompletion(
             body = {
                 model: config.model,
                 messages: openAiMessages,
-                temperature: 0.7,
+                temperature: config.temperature ?? 0.7,
+                top_p: config.topP ?? 1.0,
+                max_tokens: config.maxTokens
             };
         }
 
         console.log(`[LLM] Requesting ${config.provider} at ${url}`);
 
-        // 2. 发起请求
+        // 3. 发起请求
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000); 
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased timeout for slow local models
 
         const response = await fetch(url, {
             method: 'POST',
@@ -145,7 +155,7 @@ export async function generateCompletion(
 
         const data = await response.json();
 
-        // 3. 解析响应
+        // 4. 解析响应
         if (config.provider === 'ollama') {
             return data.message?.content || "Ollama 返回了空内容";
         } else {
@@ -167,9 +177,66 @@ export async function generateCompletion(
     }
 }
 
+// Check Connection Function
+export async function checkConnection(config: LLMConfig): Promise<{ success: boolean; latency: number; message?: string }> {
+    const start = performance.now();
+    try {
+        let url = config.baseUrl.replace(/\/$/, '');
+        let headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        
+        if (config.provider !== 'ollama' && config.apiKey) {
+            headers['Authorization'] = `Bearer ${config.apiKey}`;
+        }
+
+        // Determine probe URL based on provider
+        let probeUrl = '';
+        if (config.provider === 'ollama') {
+            probeUrl = `${url}/api/tags`; // Ollama list models endpoint
+        } else {
+             if (!url.endsWith('/v1')) url += '/v1';
+             probeUrl = `${url}/models`; // OpenAI compatible list models endpoint
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for ping
+
+        const response = await fetch(probeUrl, {
+            method: 'GET',
+            headers,
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+             // Some providers might block GET /models but allow chat, retry with a minimal chat completion
+             throw new Error(`Status: ${response.status}`);
+        }
+
+        const end = performance.now();
+        return { success: true, latency: Math.round(end - start) };
+
+    } catch (error) {
+        // Fallback: Try a minimal completion request if /models fails (some providers restrict listing models)
+        try {
+            // Using a separate try-catch for the fallback
+             const startFallback = performance.now();
+             await generateCompletion([{role: 'user', content: 'hi'}], { ...config, maxTokens: 1 });
+             const endFallback = performance.now();
+             return { success: true, latency: Math.round(endFallback - startFallback) };
+        } catch (e) {
+            return { success: false, latency: 0, message: String(error) };
+        }
+    }
+}
+
+
 // OpenAI TTS Fetcher
 export async function fetchOpenAITTS(text: string, config: LLMConfig): Promise<ArrayBuffer> {
-    const baseUrl = config.baseUrl.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '') + '/v1'; 
+    const safeBaseUrl = config.baseUrl || DEFAULT_CONFIG.baseUrl;
+    const baseUrl = safeBaseUrl.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '') + '/v1'; 
     const url = `${baseUrl}/audio/speech`;
     
     console.log("[TTS] Requesting OpenAI TTS:", url);

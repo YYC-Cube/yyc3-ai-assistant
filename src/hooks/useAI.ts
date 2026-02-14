@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { generateCompletion, DEFAULT_CONFIG, LLMConfig, MessageContent } from '@/utils/llm';
 import { retrieveContext, getEmbedding, MemoryEntry } from '@/utils/rag';
-import { syncPush, syncPull, isMixedContent } from '@/utils/cloud';
-import { ExtendedConfig } from '@/components/ai/ConfigPanel';
+import { useConfigStore } from '@/stores/config-store';
+import { useAuthStore } from '@/stores/auth-store';
 
 export interface Message {
     id: string;
@@ -24,27 +24,24 @@ interface CommandActions {
 export function useAI(actions: CommandActions) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [memories, setMemories] = useState<MemoryEntry[]>([]);
-    const [config, setConfig] = useState<ExtendedConfig>({
-        ...DEFAULT_CONFIG,
-        syncServerUrl: 'http://8.152.195.33:7007'
-    });
     const [processingState, setProcessingState] = useState<ProcessingState>('idle');
-    const [userId] = useState(() => {
-        let uid = localStorage.getItem('yyc_uid');
-        if (!uid) {
-            uid = 'user_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('yyc_uid', uid);
-        }
-        return uid;
-    });
+    
+    // 从 Zustand Store 获取配置 / Get config from Zustand Store
+    const { activeConfig, loadConfigs, applyLocalConfig } = useConfigStore();
+    const { user } = useAuthStore();
 
-    // 1. Persistence & Auto-Sync
+    // 配置兼容层：对外暴露与旧接口一致的 config 和 updateConfig
+    // Compatibility layer: expose config & updateConfig matching old interface
+    const config = activeConfig;
+
+    const updateConfig = useCallback((newConfig: LLMConfig) => {
+        applyLocalConfig(newConfig);
+    }, [applyLocalConfig]);
+
+    // 1. 初始化：加载本地数据 + 同步 PG 配置
+    // Init: Load local data + sync PG configs
     useEffect(() => {
-        // Load local first
-        const savedConfig = localStorage.getItem('yyc_config');
-        if (savedConfig) {
-            try { setConfig(JSON.parse(savedConfig)); } catch (e) { console.error(e); }
-        }
+        // 加载历史消息 / Load message history
         const savedHistory = localStorage.getItem('yyc_history');
         if (savedHistory) {
             try { setMessages(JSON.parse(savedHistory)); } catch (e) { console.error(e); }
@@ -54,30 +51,11 @@ export function useAI(actions: CommandActions) {
             try { setMemories(JSON.parse(savedMemories)); } catch (e) { console.error(e); }
         }
 
-        // Try to pull from cloud on startup
-        const pullFromCloud = async () => {
-             // Only try sync if we have a URL and it's NOT mixed content
-             if (!config.syncServerUrl || isMixedContent(config.syncServerUrl)) return;
-
-             const cloudData = await syncPull(config.syncServerUrl, userId);
-             if (cloudData.success && cloudData.data) {
-                 console.log("Cloud Sync Pulled:", cloudData);
-                 if (cloudData.data.messages?.length > 0) {
-                     setMessages(cloudData.data.messages);
-                 }
-                 if (cloudData.data.config) {
-                     setConfig(prev => ({ ...prev, ...cloudData.data!.config }));
-                 }
-             } else {
-                 // Silent fail 
-             }
-        };
-        
-        // Delay sync to allow UI to settle
-        setTimeout(pullFromCloud, 1000);
-
+        // 从 PG 加载配置（通过 Zustand Store） / Load configs from PG (via Zustand Store)
+        loadConfigs();
     }, []);
 
+    // 持久化消息到 localStorage / Persist messages to localStorage
     useEffect(() => {
         localStorage.setItem('yyc_history', JSON.stringify(messages));
     }, [messages]);
@@ -85,29 +63,6 @@ export function useAI(actions: CommandActions) {
     useEffect(() => {
         localStorage.setItem('yyc_memories', JSON.stringify(memories));
     }, [memories]);
-
-    // Auto-Push to Cloud when messages change (debounced)
-    useEffect(() => {
-        // Don't setup timer if config is invalid or mixed content
-        if (!config.syncServerUrl || isMixedContent(config.syncServerUrl)) return;
-
-        const timer = setTimeout(() => {
-            if (messages.length > 0) {
-                syncPush(config.syncServerUrl!, userId, {
-                    config,
-                    messages
-                }).then(res => {
-                    // Silent
-                });
-            }
-        }, 5000);
-        return () => clearTimeout(timer);
-    }, [messages, config, userId]);
-
-    const updateConfig = (newConfig: ExtendedConfig) => {
-        setConfig(newConfig);
-        localStorage.setItem('yyc_config', JSON.stringify(newConfig));
-    };
 
     // 2. Command Parsing
     const parseAndExecuteCommands = (text: string): string => {
@@ -166,7 +121,7 @@ export function useAI(actions: CommandActions) {
             if (text.length > 5 && config.provider !== 'moonshot') { 
                  const ragContext = await retrieveContext(text, memories, config);
                  if (ragContext) {
-                     systemContext = `\n${ragContext}\n(请参考上述记忆回答用户，但不要明确提及“根据记忆”)`;
+                     systemContext = `\n${ragContext}\n(请参考上述记忆回答用户，但不要明确提及"根据记忆")`;
                  }
             }
 

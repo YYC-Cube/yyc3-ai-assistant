@@ -12,6 +12,7 @@ interface DebateOverlayProps {
     mainConfig: LLMConfig;
     onSpeak: (text: string, config: LLMConfig) => void;
     onStatusChange: (status: 'idle' | 'processing' | 'speaking') => void;
+    initialTopic?: string;
 }
 
 interface DebateMessage {
@@ -22,10 +23,10 @@ interface DebateMessage {
     color: string;
 }
 
-export function DebateOverlay({ isOpen, onClose, mainConfig, onSpeak, onStatusChange }: DebateOverlayProps) {
+export function DebateOverlay({ isOpen, onClose, mainConfig, onSpeak, onStatusChange, initialTopic }: DebateOverlayProps) {
     const [charA, setCharA] = useState<CharacterProfile>(PRESET_CHARACTERS[1]); // Luna
     const [charB, setCharB] = useState<CharacterProfile>(PRESET_CHARACTERS[2]); // HAL
-    const [topic, setTopic] = useState('');
+    const [topic, setTopic] = useState(initialTopic || '');
     const [isDebating, setIsDebating] = useState(false);
     const [transcript, setTranscript] = useState<DebateMessage[]>([]);
     const [round, setRound] = useState(0);
@@ -148,7 +149,7 @@ export function DebateOverlay({ isOpen, onClose, mainConfig, onSpeak, onStatusCh
                 >
                     <motion.div 
                         initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-                        className="w-full max-w-4xl h-[80vh] bg-[#0f172a] border border-cyan-500/30 rounded-3xl overflow-hidden flex flex-col shadow-2xl shadow-cyan-900/20"
+                        className="w-full max-w-4xl h-[80vh] bg-[#0f172a]/70 border border-cyan-500/30 rounded-3xl overflow-hidden flex flex-col shadow-2xl shadow-cyan-900/20 backdrop-blur-xl"
                     >
                         {/* Header */}
                         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-cyan-900/20 to-purple-900/20">
